@@ -1,31 +1,69 @@
 from openai import OpenAI
 from dotenv import load_dotenv
+import time
 import os
 
 load_dotenv()
 
-writer_prompt = """
-1. Give me only the first nontrivial idea needed to solve this problem
-2. DO NOT CONTINUE TO THE SOLUTION
-3. End your response after the first insight
+model_type = "arcee-ai/trinity-large-thinking:free"
 
+writer_prompt = """
+You are a mathematical hint generator.
+
+Give ONLY the first conceptual insight needed to begin the problem.
+
+DO NOT:
+- derive consequences of the idea,
+- simplify the problem fully,
+- compute bounds,
+- introduce constructions,
+- classify cases,
+- give the final answer,
+- continue after the initial observation.
+
+Your response must:
+- be at most 2 sentences,
+- contain exactly one idea,
+- stop before any substantial derivation begins.
+
+If you find yourself proving something or reducing the problem to computation, stop immediately.
 """
 
 critic_prompt = """
-1. DO NOT PROPOSE A REPLACEMENT SOLUTION FOR THIS PROBLEM
-2. Give pros and cons of idea
-3. Identify errors, unjustified steps, hidden assumptions, and logical gaps
-4. Test edge cases and counterexamples
-5. Verify algebra, calculus, probability
-6. Identify where rigor is missing
+You are a mathematical critic.
 
-This is the problem and idea:
+Your only task is to determine whether the proposed idea/proof is mathematically valid.
+
+Do not propose a new solution.
+Do not continue the proof.
+
+Identify:
+- logical gaps,
+- unjustified assumptions,
+- incorrect deductions,
+- invalid computations,
+- missing rigor.
+
+Be precise and skeptical.
+
+This is the problem and proposed idea:
 """
 
 judge_prompt = """
-1. DO NOT PROPOSE A REPLACEMENT SOLUTION FOR THIS PROBLEM
-2. Tell me if this idea is mathematically valid
-3. Determine if proof in the right idea
+You are a mathematical judge.
+
+Your only task is to determine whether the proposed idea is fundamentally moving in the correct direction.
+
+Do not solve the problem.
+Do not provide a replacement strategy.
+
+Think about
+1. Is the core idea promising?
+2. Is the reasoning directionally correct?
+
+Give simply yes or no on whether to continue with the idea
+
+Focus on high-level mathematical validity rather than details.
 
 This is the problem, idea, and critiques:
 """
@@ -40,28 +78,39 @@ client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.environ["OPENROUTER_API_KEY"],
 )
+start = time.time()
 
 writer_response = client.chat.completions.create(
-    model="baidu/cobuddy:free",
+    model=model_type,
     messages=[
         {"role": "user", "content": writer_prompt + question}
     ],
+    extra_body={
+        "reasoning": {
+            "effort": "minimal"
+        }
+    }
 )
-
+writer_end = time.time()
+print(writer_end - start)
 print(writer_response.choices[0].message.content)
 critic_prompt = client.chat.completions.create(
-    model="baidu/cobuddy:free",
+    model=model_type,
     messages=[
         {"role": "user", "content": critic_prompt + question + "\n" + writer_response.choices[0].message.content}
     ],
 )
-
+critic_end = time.time()
+print(critic_end - writer_end)
 print(critic_prompt.choices[0].message.content)
 
 judge_prompt = client.chat.completions.create(
-    model="baidu/cobuddy:free",
+    model=model_type,
     messages=[
         {"role": "user", "content": judge_prompt + question + "\n" + writer_response.choices[0].message.content + "\n" + critic_prompt.choices[0].message.content}
     ],
 )
+
+judge_end = time.time()
+print(judge_end - critic_end)
 print(judge_prompt.choices[0].message.content)
