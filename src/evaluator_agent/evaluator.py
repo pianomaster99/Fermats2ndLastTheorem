@@ -145,4 +145,3 @@ class EvaluatorAgent():
             "score": float(llm_eval.get("score", 0.5)),
         })
 
-
