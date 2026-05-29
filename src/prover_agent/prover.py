@@ -1,12 +1,74 @@
 from openai import OpenAI
+from graph_of_thoughts.operations.thought import Thought
 from src.config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL
+import json
 
 class ProverAgent():
     """LLM prover that proposes Lean tactics through OpenRouter."""
 
-    def __init__(self, model: str, name: str = "openrouter") -> None:
+    def __init__(self, model: str, name: str = "openrouter"):
 
         #Setting up the model
         self.name = name
         self.model = model
         self.client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=OPENROUTER_API_KEY)
+
+    def propose(self, previous_thought: Thought, numThoughts: int):
+        #Input and output of prover agent should be list of "Thoughts" as defined in graph of thoughts
+        """
+        Thought(
+            state={
+                "problem": str,
+                "proof": str,
+                "goals": list[str],
+                "candidate": str,
+                "feedback": str,
+                "valid": bool,
+            }
+        )
+        """
+        state = previous_thought.state
+
+        prompt = f"""
+        You are a Lean theorem-proving agent.
+
+        Return exactly a JSON array of up to {numThoughts} objects. Each object must have:
+        - "tactic": one Lean tactic line
+        - "rationale": short reason
+        - "confidence": number from 0 to 1
+
+        Do not include markdown.
+
+        Theorem:
+        {state["problem"]}
+
+        Current Lean state:
+        {state["proof"]}
+
+        Current goals:
+        {state["goals"]}
+
+        Previous evaluator feedback:
+        {state["feedback"] if state["feedback"] else "(none)"}
+        """
+            
+        response  = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        raw_text = response.choices[0].message.content or "[]"
+
+        proposals = json.loads(raw_text)
+        thoughts = []
+        for proposal in proposals:
+            new_state = {
+                **state,
+                "candidate": proposal["tactic"],
+                "rationale": proposal.get("rationale", ""),
+                "confidence": proposal.get("confidence", 0.0),
+                "valid": False,
+            }
+
+            thoughts.append(Thought(new_state))
+
+        return thoughts
