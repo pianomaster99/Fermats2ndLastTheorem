@@ -2,321 +2,185 @@ from __future__ import annotations
 
 import heapq
 from itertools import count
-from typing import Any
+from types import SimpleNamespace
 
-from graph_of_thoughts.controller import Controller
-from graph_of_thoughts.language_models import AbstractLanguageModel
-from graph_of_thoughts.operations import (
-    GraphOfOperations,
-    KeepBestN,
-    Operation,
-    Score,
-    Thought,
-)
-from graph_of_thoughts.parser import Parser
-from graph_of_thoughts.prompter import Prompter
+from graph_of_thoughts.operations import KeepBestN, Score, Thought
 
 from src.prover.agents import ProverAgent
 from src.prover.controllers import ControllerAgent
 from src.prover.lean_interface import LeanBackend
-from src.prover.data_types import (
-    ControllerEvaluation,
-    SearchResult,
-    TacticCandidate,
-    TheoremTask,
-)
+from src.prover.data_types import SearchResult, TacticCandidate, TheoremTask
 from src.prover.value_model import HeuristicValueModel
 
 
-class _NoLanguageModel(AbstractLanguageModel):
-    """Placeholder LM for Graph-of-Thoughts operations that call local agents."""
+def prove_with_graph_of_thoughts(
+    task: TheoremTask,
+    backend: LeanBackend,
+    provers: list[ProverAgent],
+    controllers: list[ControllerAgent],
+    value_model: HeuristicValueModel | object | None = None,
+    candidates_per_prover: int = 4,
+    max_expansions: int = 64,
+) -> tuple[SearchResult, dict[int, Thought], list[Thought]]:
+    value_model = value_model or HeuristicValueModel()
+    thoughts: dict[int, Thought] = {}
+    rejected_thoughts: list[Thought] = []
 
-    def __init__(self) -> None:
-        self.model_name = "local-prover-agents"
-        self.prompt_tokens = 0
-        self.completion_tokens = 0
-        self.cost = 0.0
+    root = Thought(
+        {
+            "lean_state": backend.initial_state(task),
+            "proof_prefix": [],
+            "status": "open",
+        }
+    )
+    root.score = 1.0
+    thoughts[root.id] = root
 
-    def query(self, query: str, num_responses: int = 1) -> list[str]:
-        return []
+    frontier: list[tuple[float, int, int]] = []
+    tie_breaker = count()
+    heapq.heappush(frontier, (-root.score, next(tie_breaker), root.id))
 
-    def get_response_texts(self, query_responses: Any) -> list[str]:
-        return []
+    expanded = 0
+    while frontier and expanded < max_expansions:
+        _, _, thought_id = heapq.heappop(frontier)
+        parent = thoughts[thought_id]
+        if parent.state["status"] != "open":
+            continue
 
-
-class _NoPrompter(Prompter):
-    """Required by the package controller; local operations do not prompt."""
-
-    def aggregation_prompt(self, state_dicts: list[dict], **kwargs) -> str:
-        return ""
-
-    def improve_prompt(self, **kwargs) -> str:
-        return ""
-
-    def generate_prompt(self, num_branches: int, **kwargs) -> str:
-        return ""
-
-    def validation_prompt(self, **kwargs) -> str:
-        return ""
-
-    def score_prompt(self, state_dicts: list[dict], **kwargs) -> str:
-        return ""
-
-
-class _NoParser(Parser):
-    """Required by the package controller; local operations parse typed objects."""
-
-    def parse_aggregation_answer(
-        self,
-        states: list[dict],
-        texts: list[str],
-    ) -> dict | list[dict]:
-        return states
-
-    def parse_improve_answer(self, state: dict, texts: list[str]) -> dict:
-        return state
-
-    def parse_generate_answer(self, state: dict, texts: list[str]) -> list[dict]:
-        return []
-
-    def parse_validation_answer(self, state: dict, texts: list[str]) -> bool:
-        return False
-
-    def parse_score_answer(self, states: list[dict], texts: list[str]) -> list[float]:
-        return [0.0 for _ in states]
-
-
-class _GenerateTacticThoughts(Operation):
-    def __init__(
-        self,
-        task: TheoremTask,
-        parent: Thought,
-        provers: list[ProverAgent],
-        candidates_per_prover: int,
-    ) -> None:
-        super().__init__()
-        self.task = task
-        self.parent = parent
-        self.provers = provers
-        self.candidates_per_prover = candidates_per_prover
-        self.thoughts: list[Thought] = []
-
-    def get_thoughts(self) -> list[Thought]:
-        return self.thoughts
-
-    def _execute(
-        self,
-        lm: AbstractLanguageModel,
-        prompter: Prompter,
-        parser: Parser,
-        **kwargs,
-    ) -> None:
-        parent_state = self.parent.state
-        candidates = self._dedupe_candidates(
-            candidate
-            for prover in self.provers
-            for candidate in prover.propose(
-                self.task,
-                parent_state,
-                self.candidates_per_prover,
-            )
+        expanded += 1
+        children = _next_thoughts(
+            task,
+            parent,
+            provers,
+            controllers,
+            value_model,
+            candidates_per_prover,
+            rejected_thoughts,
         )
-        self.thoughts = [
-            Thought(
-                {
-                    "task": self.task,
-                    "parent_thought_id": self.parent.id,
-                    "parent_state": parent_state,
-                    "candidate": candidate,
-                }
-            )
-            for candidate in candidates
-        ]
 
-    def _dedupe_candidates(self, candidates) -> list[TacticCandidate]:
-        seen: set[str] = set()
-        unique = []
-        for candidate in candidates:
-            key = candidate.tactic.strip()
-            if not key or key in seen:
-                continue
-            seen.add(key)
-            unique.append(candidate)
-        return unique
-
-
-class _EvaluateTacticThoughts(Operation):
-    def __init__(self, controllers: list[ControllerAgent]) -> None:
-        super().__init__()
-        self.controllers = controllers
-        self.thoughts: list[Thought] = []
-        self.rejected: list[Thought] = []
-
-    def get_thoughts(self) -> list[Thought]:
-        return self.thoughts
-
-    def _execute(
-        self,
-        lm: AbstractLanguageModel,
-        prompter: Prompter,
-        parser: Parser,
-        **kwargs,
-    ) -> None:
-        for thought in self.get_previous_thoughts():
-            state = dict(thought.state)
-            parent_state = state["parent_state"]
-            candidate = state["candidate"]
-            evaluation = self._evaluate(parent_state, candidate)
-            state["evaluation"] = evaluation
-
-            if not evaluation.result.valid:
-                rejected = Thought(state)
-                rejected.valid = False
-                self.rejected.append(rejected)
-                continue
-
-            proof_prefix = parent_state["proof_prefix"] + [candidate.tactic]
-            state.update(
-                {
-                    "lean_state": evaluation.result.state,
-                    "proof_prefix": proof_prefix,
-                    "incoming_tactic": candidate.tactic,
-                    "status": "solved" if evaluation.result.solved else "open",
-                }
-            )
-            evaluated_thought = Thought(state)
-            evaluated_thought.valid = True
-            evaluated_thought.solved = evaluation.result.solved
-            self.thoughts.append(evaluated_thought)
-
-    def _evaluate(
-        self,
-        state: dict,
-        candidate: TacticCandidate,
-    ) -> ControllerEvaluation:
-        evaluations = [
-            controller.evaluate(state, candidate)
-            for controller in self.controllers
-        ]
-        return max(evaluations, key=lambda item: item.value_hint)
-
-
-class GraphOfThoughtProver:
-    def __init__(
-        self,
-        backend: LeanBackend,
-        provers: list[ProverAgent],
-        controllers: list[ControllerAgent],
-        value_model: HeuristicValueModel | object | None = None,
-        candidates_per_prover: int = 4,
-        max_expansions: int = 64,
-    ) -> None:
-        self.backend = backend
-        self.provers = provers
-        self.controllers = controllers
-        self.value_model = value_model or HeuristicValueModel()
-        self.candidates_per_prover = candidates_per_prover
-        self.max_expansions = max_expansions
-        self.thoughts: dict[int, Thought] = {}
-        self.rejected_thoughts: list[Thought] = []
-
-    def prove(self, task: TheoremTask) -> SearchResult:
-        self.thoughts = {}
-        self.rejected_thoughts = []
-
-        root = Thought(
-            {
-                "task": task,
-                "lean_state": self.backend.initial_state(task),
-                "proof_prefix": [],
-                "incoming_tactic": None,
-                "parent_thought_id": None,
-                "status": "open",
-            }
-        )
-        root.score = 1.0
-        self.thoughts[root.id] = root
-
-        tie_breaker = count()
-        frontier: list[tuple[float, int, int]] = []
-        heapq.heappush(frontier, (-root.score, next(tie_breaker), root.id))
-
-        expanded = 0
-        while frontier and expanded < self.max_expansions:
-            _, _, thought_id = heapq.heappop(frontier)
-            thought = self.thoughts[thought_id]
-            if thought.state["status"] != "open":
-                continue
-
-            expanded += 1
-            rejected, accepted = self._expand_thought(task, thought)
-            self.rejected_thoughts.extend(rejected)
-
-            for child in accepted:
-                self.thoughts[child.id] = child
-                if child.solved:
-                    return SearchResult(
-                        solved=True,
-                        proof=child.state["proof_prefix"],
-                        final_state=child.state["lean_state"],
-                        thoughts_expanded=expanded,
-                        graph_thoughts=len(self.thoughts),
-                        rejected_thoughts=len(self.rejected_thoughts),
-                    )
-
-                heapq.heappush(
-                    frontier,
-                    (-child.score, next(tie_breaker), child.id),
+        for child in children:
+            thoughts[child.id] = child
+            if child.solved:
+                return (
+                    _result(True, child, expanded, thoughts, rejected_thoughts),
+                    thoughts,
+                    rejected_thoughts,
                 )
+            heapq.heappush(frontier, (-child.score, next(tie_breaker), child.id))
 
-            thought.state["status"] = "expanded"
+        parent.state["status"] = "expanded"
 
-        best = max(self.thoughts.values(), key=lambda item: item.score)
-        return SearchResult(
-            solved=False,
-            proof=best.state["proof_prefix"],
-            final_state=best.state["lean_state"],
-            thoughts_expanded=expanded,
-            graph_thoughts=len(self.thoughts),
-            rejected_thoughts=len(self.rejected_thoughts),
+    best = max(thoughts.values(), key=lambda thought: thought.score)
+    return (
+        _result(False, best, expanded, thoughts, rejected_thoughts),
+        thoughts,
+        rejected_thoughts,
+    )
+
+
+def _next_thoughts(
+    task: TheoremTask,
+    parent: Thought,
+    provers: list[ProverAgent],
+    controllers: list[ControllerAgent],
+    value_model: HeuristicValueModel | object,
+    candidates_per_prover: int,
+    rejected_thoughts: list[Thought],
+) -> list[Thought]:
+    valid_children: list[Thought] = []
+
+    for candidate in _candidate_tactics(task, parent, provers, candidates_per_prover):
+        evaluation = max(
+            (
+                controller.evaluate(parent.state, candidate)
+                for controller in controllers
+            ),
+            key=lambda item: item.value_hint,
         )
+        state = {
+            "lean_state": evaluation.result.state,
+            "proof_prefix": parent.state["proof_prefix"] + [candidate.tactic],
+            "status": "solved" if evaluation.result.solved else "open",
+            "incoming_tactic": candidate.tactic,
+            "candidate": candidate,
+            "evaluation": evaluation,
+            "parent_state": parent.state,
+        }
+        thought = Thought(state)
+        thought.valid = evaluation.result.valid
+        thought.solved = evaluation.result.solved
 
-    def _expand_thought(
-        self,
-        task: TheoremTask,
-        thought: Thought,
-    ) -> tuple[list[Thought], list[Thought]]:
-        graph = GraphOfOperations()
-        generate = _GenerateTacticThoughts(
-            task=task,
-            parent=thought,
-            provers=self.provers,
-            candidates_per_prover=self.candidates_per_prover,
+        if evaluation.result.valid:
+            valid_children.append(thought)
+        else:
+            rejected_thoughts.append(thought)
+
+    return _keep_best(valid_children, value_model, candidates_per_prover, len(provers))
+
+
+def _candidate_tactics(
+    task: TheoremTask,
+    parent: Thought,
+    provers: list[ProverAgent],
+    candidates_per_prover: int,
+) -> list[TacticCandidate]:
+    seen: set[str] = set()
+    candidates: list[TacticCandidate] = []
+
+    for prover in provers:
+        for candidate in prover.propose(task, parent.state, candidates_per_prover):
+            tactic = candidate.tactic.strip()
+            if not tactic or tactic in seen:
+                continue
+            seen.add(tactic)
+            candidates.append(candidate)
+
+    return candidates
+
+
+def _keep_best(
+    thoughts: list[Thought],
+    value_model: HeuristicValueModel | object,
+    candidates_per_prover: int,
+    prover_count: int,
+) -> list[Thought]:
+    if not thoughts:
+        return []
+
+    source = SimpleNamespace(executed=True, get_thoughts=lambda: thoughts)
+    score = Score(scoring_function=lambda state: _score(state, value_model))
+    keep = KeepBestN(n=max(1, candidates_per_prover * prover_count))
+    source.add_successor = lambda operation: None
+    score.predecessors = [source]
+    keep.predecessors = [score]
+
+    score.execute(None, None, None)
+    keep.execute(None, None, None)
+    return keep.get_thoughts()
+
+
+def _score(state: dict, value_model: HeuristicValueModel | object) -> float:
+    return float(
+        value_model.predict(
+            state["parent_state"],
+            state["candidate"],
+            state["evaluation"],
         )
-        evaluate = _EvaluateTacticThoughts(self.controllers)
-        score = Score(scoring_function=lambda state: self._score_thought_state(state))
-        keep = KeepBestN(n=max(1, self.candidates_per_prover * len(self.provers)))
+    )
 
-        graph.append_operation(generate)
-        graph.append_operation(evaluate)
-        graph.append_operation(score)
-        graph.append_operation(keep)
 
-        Controller(
-            lm=_NoLanguageModel(),
-            graph=graph,
-            prompter=_NoPrompter(),
-            parser=_NoParser(),
-            problem_parameters={},
-        ).run()
-
-        return evaluate.rejected, keep.get_thoughts()
-
-    def _score_thought_state(self, thought_state: dict) -> float:
-        return float(
-            self.value_model.predict(
-                thought_state["parent_state"],
-                thought_state["candidate"],
-                thought_state["evaluation"],
-            )
-        )
+def _result(
+    solved: bool,
+    thought: Thought,
+    expanded: int,
+    thoughts: dict[int, Thought],
+    rejected_thoughts: list[Thought],
+) -> SearchResult:
+    return SearchResult(
+        solved=solved,
+        proof=thought.state["proof_prefix"],
+        final_state=thought.state["lean_state"],
+        thoughts_expanded=expanded,
+        graph_thoughts=len(thoughts),
+        rejected_thoughts=len(rejected_thoughts),
+    )

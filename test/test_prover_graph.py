@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.prover.agents import OpenRouterProverAgent, ScriptedProverAgent
 from src.prover.controllers import LeanValidityController
-from src.prover.graph_search import GraphOfThoughtProver
+from src.prover.graph_search import prove_with_graph_of_thoughts
 from src.prover.lean_interface import MockLeanBackend, PantographLeanBackend
 from src.prover.data_types import TheoremTask
 
@@ -15,19 +15,16 @@ from src.prover.data_types import TheoremTask
 class TestGraphProver(unittest.TestCase):
     def test_mock_graph_prover_solves_and_comm(self):
         backend = MockLeanBackend()
-        prover = GraphOfThoughtProver(
+        result, _, _ = prove_with_graph_of_thoughts(
+            TheoremTask(
+                name="and_comm_test",
+                statement="∀ {p q : Prop}, p ∧ q → q ∧ p",
+            ),
             backend=backend,
             provers=[ScriptedProverAgent()],
             controllers=[LeanValidityController(backend)],
             candidates_per_prover=5,
             max_expansions=16,
-        )
-
-        result = prover.prove(
-            TheoremTask(
-                name="and_comm_test",
-                statement="∀ {p q : Prop}, p ∧ q → q ∧ p",
-            )
         )
 
         self.assertTrue(result.solved)
@@ -43,19 +40,16 @@ class TestGraphProver(unittest.TestCase):
         except Exception as exc:
             self.skipTest(f"Pantograph backend is unavailable: {exc}")
 
-        prover = GraphOfThoughtProver(
+        result, _, _ = prove_with_graph_of_thoughts(
+            TheoremTask(
+                name="and_comm_test",
+                statement="∀ {p q : Prop}, p ∧ q → q ∧ p",
+            ),
             backend=backend,
             provers=[ScriptedProverAgent()],
             controllers=[LeanValidityController(backend)],
             candidates_per_prover=5,
             max_expansions=16,
-        )
-
-        result = prover.prove(
-            TheoremTask(
-                name="and_comm_test",
-                statement="∀ {p q : Prop}, p ∧ q → q ∧ p",
-            )
         )
 
         self.assertTrue(result.solved)

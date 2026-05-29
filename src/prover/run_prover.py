@@ -9,12 +9,12 @@ if __package__ in {None, ""}:
 
 from src.prover.agents import OpenRouterProverAgent, ScriptedProverAgent
 from src.prover.controllers import LeanValidityController
-from src.prover.graph_search import GraphOfThoughtProver
+from src.prover.graph_search import prove_with_graph_of_thoughts
 from src.prover.lean_interface import MockLeanBackend, PantographLeanBackend
 from src.prover.data_types import TheoremTask
 
 
-def build_prover(args: argparse.Namespace) -> GraphOfThoughtProver:
+def build_prover(args: argparse.Namespace):
     backend = PantographLeanBackend() if args.backend == "pantograph" else MockLeanBackend()
 
     provers = [] if args.openrouter_only else [ScriptedProverAgent()]
@@ -24,13 +24,7 @@ def build_prover(args: argparse.Namespace) -> GraphOfThoughtProver:
         raise ValueError("No prover agents configured. Pass --model or remove --openrouter-only.")
 
     controllers = [LeanValidityController(backend)]
-    return GraphOfThoughtProver(
-        backend=backend,
-        provers=provers,
-        controllers=controllers,
-        candidates_per_prover=args.candidates_per_prover,
-        max_expansions=args.max_expansions,
-    )
+    return backend, provers, controllers
 
 
 def main() -> None:
@@ -56,8 +50,15 @@ def main() -> None:
         name="and_comm_test",
         statement="∀ {p q : Prop}, p ∧ q → q ∧ p",
     )
-    prover = build_prover(args)
-    result = prover.prove(task)
+    backend, provers, controllers = build_prover(args)
+    result, thoughts, rejected_thoughts = prove_with_graph_of_thoughts(
+        task=task,
+        backend=backend,
+        provers=provers,
+        controllers=controllers,
+        candidates_per_prover=args.candidates_per_prover,
+        max_expansions=args.max_expansions,
+    )
 
     print(f"solved: {result.solved}")
     print(f"thoughts expanded: {result.thoughts_expanded}")
@@ -70,9 +71,9 @@ def main() -> None:
     print(result.final_state)
     if args.show_attempts:
         print("attempts:")
-        attempts = list(prover.rejected_thoughts) + [
+        attempts = list(rejected_thoughts) + [
             thought
-            for thought in prover.thoughts.values()
+            for thought in thoughts.values()
             if thought.state.get("incoming_tactic")
         ]
         for thought in attempts:
