@@ -67,6 +67,7 @@ class ProverAgent():
                 "rationale": proposal.get("rationale", ""),
                 "confidence": proposal.get("confidence", 0.0),
                 "valid": False,
+                "solved": False,
             }
 
             thoughts.append(Thought(new_state))

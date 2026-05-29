@@ -2,6 +2,7 @@ from openai import OpenAI
 from graph_of_thoughts.operations.thought import Thought
 from src.config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL
 from pantograph.server import Server
+import json
 
 class EvaluatorAgent():
     """LLM that evaluate Lean tactics through OpenRouter."""
@@ -14,22 +15,6 @@ class EvaluatorAgent():
         self.client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=OPENROUTER_API_KEY)
         self.server = Server()
         self.lean_states = {}
-
-    def start_problem(self, problem: str) -> Thought:
-        goal_state = self.server.goal_start(problem)
-        lean_state = str(goal_state).strip()
-        self.lean_states[lean_state] = goal_state
-
-        return Thought({
-            "problem": problem,
-            "lean_state": lean_state,
-            "proof": [],
-            "goals": [lean_state],
-            "candidate": "",
-            "feedback": "",
-            "valid": False,
-            "solved": False,
-        })
 
 
     def lean_check(self, thought: Thought):
@@ -84,6 +69,7 @@ class EvaluatorAgent():
         return "no goals" in text or text in {"", "[]"}
 
     def evaluate(self, previous_thought: Thought):
+        #Return LLM evaluation along with deterministic lean check
         #Example previous thought that evaluator needs to evaluate
         """
         Thought(
@@ -96,3 +82,67 @@ class EvaluatorAgent():
                 "valid": False,
             }
         )"""
+
+        checked_state = self.lean_check(previous_thought).state
+
+        #If lean rejects the proof, no point in prompting llm
+        if not checked_state["valid"]:
+            return Thought({
+                **checked_state,
+                "feedback": f"Lean rejected the tactic: {checked_state['feedback']}",
+                "score": 0.0,
+            })
+
+        #If lean solves the proof, it is correct
+        if checked_state["solved"]:
+            return Thought({
+                **checked_state,
+                "feedback": "Lean accepted the tactic and solved the goal.",
+                "score": 1.0,
+            })
+        
+        #Call llm when lean is accepted but proof is not solved
+        prompt = f"""
+        You are evaluating a Lean tactic attempt.
+
+        Theorem:
+        {checked_state["problem"]}
+
+        Candidate tactic:
+        {checked_state["candidate"]}
+
+        Lean accepted tactic:
+        {checked_state["valid"]}
+
+        Solved:
+        {checked_state["solved"]}
+
+        Lean feedback:
+        {checked_state["feedback"]}
+
+        Current Lean state after tactic:
+        {checked_state["lean_state"]}
+
+        Return exactly JSON:
+        {{
+        "feedback": "short critique",
+        "score": number from 0 to 1
+        }}
+
+        Do not include markdown.
+        """
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw_text = response.choices[0].message.content or "{}"
+        llm_eval = json.loads(raw_text)
+        llm_feedback = llm_eval.get("feedback", llm_eval.get("evaluation", ""))
+        return Thought({
+            **checked_state,
+            "feedback": f"Lean accepted the tactic. {llm_feedback}".strip(),
+            "score": float(llm_eval.get("score", 0.5)),
+        })
+
+
