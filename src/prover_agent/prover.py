@@ -19,7 +19,7 @@ class ProverAgent():
         Thought(
             state={
                 "problem": str,
-                "proof": str,
+                "lean_state": str,
                 "goals": list[str],
                 "candidate": str,
                 "feedback": str,
@@ -42,14 +42,14 @@ class ProverAgent():
         Theorem:
         {state["problem"]}
 
-        Current Lean state:
-        {state["proof"]}
+        Lean state so far:
+        {state.get("lean_state", "") or "(empty)"}
 
         Current goals:
-        {state["goals"]}
+        {state.get("goals", [])}
 
         Previous evaluator feedback:
-        {state["feedback"] if state["feedback"] else "(none)"}
+        {state.get("feedback", "") or "(none)"}
         """
             
         response  = self.client.chat.completions.create(
