@@ -5,7 +5,7 @@ import hashlib
 
 import numpy as np
 
-from src.prover.data_types import ControllerEvaluation, ProofNode, TacticCandidate
+from src.prover.data_types import ControllerEvaluation, TacticCandidate
 
 
 @dataclass
@@ -14,7 +14,7 @@ class HeuristicValueModel:
 
     def predict(
         self,
-        parent: ProofNode,
+        parent: dict,
         candidate: TacticCandidate,
         evaluation: ControllerEvaluation,
     ) -> float:
@@ -23,7 +23,7 @@ class HeuristicValueModel:
         if not evaluation.result.valid:
             return 0.0
 
-        shorter_bonus = max(0.0, 1.0 - 0.03 * len(parent.proof_prefix))
+        shorter_bonus = max(0.0, 1.0 - 0.03 * len(parent["proof_prefix"]))
         return (
             0.45 * candidate.confidence
             + 0.45 * evaluation.value_hint
@@ -55,7 +55,7 @@ class TinyNeuralValueModel:
 
     def predict(
         self,
-        parent: ProofNode,
+        parent: dict,
         candidate: TacticCandidate,
         evaluation: ControllerEvaluation,
     ) -> float:
@@ -65,7 +65,7 @@ class TinyNeuralValueModel:
 
     def train_batch(
         self,
-        examples: list[tuple[ProofNode, TacticCandidate, ControllerEvaluation, float]],
+        examples: list[tuple[dict, TacticCandidate, ControllerEvaluation, float]],
         epochs: int = 10,
     ) -> None:
         for _ in range(epochs):
@@ -90,13 +90,13 @@ class TinyNeuralValueModel:
 
     def _features(
         self,
-        parent: ProofNode,
+        parent: dict,
         candidate: TacticCandidate,
         evaluation: ControllerEvaluation,
     ) -> np.ndarray:
         text = "\n".join(
             [
-                parent.state,
+                parent["lean_state"],
                 candidate.tactic,
                 candidate.rationale,
                 evaluation.result.state if evaluation.result.valid else "",
@@ -119,4 +119,3 @@ class TinyNeuralValueModel:
 
     def _sigmoid(self, x: float) -> float:
         return 1.0 / (1.0 + float(np.exp(-x)))
-

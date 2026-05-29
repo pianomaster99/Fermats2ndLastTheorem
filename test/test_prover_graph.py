@@ -35,7 +35,7 @@ class TestGraphProver(unittest.TestCase):
             result.proof,
             ["intro h", "constructor", "exact h.right", "exact h.left"],
         )
-        self.assertGreater(result.failed_edges, 0)
+        self.assertGreater(result.rejected_thoughts, 0)
 
     def test_pantograph_graph_prover_solves_and_comm(self):
         try:
@@ -62,7 +62,7 @@ class TestGraphProver(unittest.TestCase):
         self.assertIn("constructor", result.proof)
         self.assertIn("exact h.right", result.proof)
         self.assertIn("exact h.left", result.proof)
-        self.assertGreater(result.graph_nodes, 1)
+        self.assertGreater(result.graph_thoughts, 1)
 
     def test_openrouter_prover_returns_candidates_when_enabled(self):
         model = os.environ.get("OPENROUTER_TEST_MODEL")
@@ -78,14 +78,12 @@ class TestGraphProver(unittest.TestCase):
             )
         )
 
-        from src.prover.data_types import ProofNode
-
         candidates = agent.propose(
             TheoremTask(
                 name="and_comm_test",
                 statement="∀ {p q : Prop}, p ∧ q → q ∧ p",
             ),
-            ProofNode(state=root_state),
+            {"lean_state": root_state, "proof_prefix": []},
             k=3,
         )
 

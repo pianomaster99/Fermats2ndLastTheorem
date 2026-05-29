@@ -1,6 +1,6 @@
 openai
 python-dotenv
 requests
-lean-dojo-v2
+# lean-dojo-v2
 git+https://github.com/stanford-centaur/PyPantograph
-graph_of_thoughts @ git+https://github.com/spcl/graph-of-thoughts.git
+git+https://github.com/spcl/graph-of-thoughts.git

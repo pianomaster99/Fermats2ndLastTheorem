@@ -5,14 +5,14 @@ import json
 import os
 import re
 
-from src.prover.data_types import ProofNode, TacticCandidate, TheoremTask
+from src.prover.data_types import TacticCandidate, TheoremTask
 
 
 class ProverAgent(ABC):
     name: str
 
     @abstractmethod
-    def propose(self, task: TheoremTask, node: ProofNode, k: int) -> list[TacticCandidate]:
+    def propose(self, task: TheoremTask, state: dict, k: int) -> list[TacticCandidate]:
         raise NotImplementedError
 
 
@@ -22,7 +22,7 @@ class ScriptedProverAgent(ProverAgent):
     def __init__(self, name: str = "scripted") -> None:
         self.name = name
 
-    def propose(self, task: TheoremTask, node: ProofNode, k: int) -> list[TacticCandidate]:
+    def propose(self, task: TheoremTask, state: dict, k: int) -> list[TacticCandidate]:
         tactics = [
             ("intro h", "Introduce the implication hypothesis.", 0.9),
             ("constructor", "Split the conjunction goal.", 0.85),
@@ -48,7 +48,7 @@ class OpenRouterProverAgent(ProverAgent):
         self.model = model
         self.client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=OPENROUTER_API_KEY)
 
-    def propose(self, task: TheoremTask, node: ProofNode, k: int) -> list[TacticCandidate]:
+    def propose(self, task: TheoremTask, state: dict, k: int) -> list[TacticCandidate]:
         prompt = f"""
 You are a Lean theorem-proving agent.
 
@@ -63,10 +63,10 @@ Theorem:
 {task.statement}
 
 Current Lean state:
-{node.state}
+{state["lean_state"]}
 
 Proof prefix so far:
-{os.linesep.join(node.proof_prefix) if node.proof_prefix else "(empty)"}
+{os.linesep.join(state["proof_prefix"]) if state["proof_prefix"] else "(empty)"}
 """
         try:
             response = self.client.chat.completions.create(

@@ -21,6 +21,8 @@ from src.prover.controllers import ControllerAgent
 from src.prover.lean_interface import LeanBackend
 from src.prover.data_types import (
     ControllerEvaluation,
+    ProofEdge,
+    ProofNode,
     SearchResult,
     TacticCandidate,
     TheoremTask,
@@ -90,13 +92,13 @@ class _GenerateTacticThoughts(Operation):
     def __init__(
         self,
         task: TheoremTask,
-        parent: Thought,
+        node: ProofNode,
         provers: list[ProverAgent],
         candidates_per_prover: int,
     ) -> None:
         super().__init__()
         self.task = task
-        self.parent = parent
+        self.node = node
         self.provers = provers
         self.candidates_per_prover = candidates_per_prover
         self.thoughts: list[Thought] = []
@@ -111,13 +113,12 @@ class _GenerateTacticThoughts(Operation):
         parser: Parser,
         **kwargs,
     ) -> None:
-        parent_state = self.parent.state
         candidates = self._dedupe_candidates(
             candidate
             for prover in self.provers
             for candidate in prover.propose(
                 self.task,
-                parent_state,
+                self.node,
                 self.candidates_per_prover,
             )
         )
@@ -125,8 +126,7 @@ class _GenerateTacticThoughts(Operation):
             Thought(
                 {
                     "task": self.task,
-                    "parent_thought_id": self.parent.id,
-                    "parent_state": parent_state,
+                    "node": self.node,
                     "candidate": candidate,
                 }
             )
@@ -150,7 +150,7 @@ class _EvaluateTacticThoughts(Operation):
         super().__init__()
         self.controllers = controllers
         self.thoughts: list[Thought] = []
-        self.rejected: list[Thought] = []
+        self.rejected: list[dict] = []
 
     def get_thoughts(self) -> list[Thought]:
         return self.thoughts
@@ -164,26 +164,18 @@ class _EvaluateTacticThoughts(Operation):
     ) -> None:
         for thought in self.get_previous_thoughts():
             state = dict(thought.state)
-            parent_state = state["parent_state"]
+            node = state["node"]
             candidate = state["candidate"]
-            evaluation = self._evaluate(parent_state, candidate)
+            evaluation = self._evaluate(node, candidate)
             state["evaluation"] = evaluation
 
             if not evaluation.result.valid:
-                rejected = Thought(state)
-                rejected.valid = False
-                self.rejected.append(rejected)
+                self.rejected.append(state)
                 continue
 
-            proof_prefix = parent_state["proof_prefix"] + [candidate.tactic]
-            state.update(
-                {
-                    "lean_state": evaluation.result.state,
-                    "proof_prefix": proof_prefix,
-                    "incoming_tactic": candidate.tactic,
-                    "status": "solved" if evaluation.result.solved else "open",
-                }
-            )
+            state["proof_prefix"] = node.proof_prefix + [candidate.tactic]
+            state["lean_state"] = evaluation.result.state
+            state["solved"] = evaluation.result.solved
             evaluated_thought = Thought(state)
             evaluated_thought.valid = True
             evaluated_thought.solved = evaluation.result.solved
@@ -191,11 +183,11 @@ class _EvaluateTacticThoughts(Operation):
 
     def _evaluate(
         self,
-        state: dict,
+        node: ProofNode,
         candidate: TacticCandidate,
     ) -> ControllerEvaluation:
         evaluations = [
-            controller.evaluate(state, candidate)
+            controller.evaluate(node, candidate)
             for controller in self.controllers
         ]
         return max(evaluations, key=lambda item: item.value_hint)
@@ -217,79 +209,98 @@ class GraphOfThoughtProver:
         self.value_model = value_model or HeuristicValueModel()
         self.candidates_per_prover = candidates_per_prover
         self.max_expansions = max_expansions
-        self.thoughts: dict[int, Thought] = {}
-        self.rejected_thoughts: list[Thought] = []
+        self.nodes: dict[str, ProofNode] = {}
+        self.edges: list[ProofEdge] = []
 
     def prove(self, task: TheoremTask) -> SearchResult:
-        self.thoughts = {}
-        self.rejected_thoughts = []
+        self.nodes = {}
+        self.edges = []
 
-        root = Thought(
-            {
-                "task": task,
-                "lean_state": self.backend.initial_state(task),
-                "proof_prefix": [],
-                "incoming_tactic": None,
-                "parent_thought_id": None,
-                "status": "open",
-            }
-        )
-        root.score = 1.0
-        self.thoughts[root.id] = root
+        root = ProofNode(state=self.backend.initial_state(task), value_score=1.0)
+        self.nodes[root.node_id] = root
 
         tie_breaker = count()
-        frontier: list[tuple[float, int, int]] = []
-        heapq.heappush(frontier, (-root.score, next(tie_breaker), root.id))
+        frontier: list[tuple[float, int, str]] = []
+        heapq.heappush(frontier, (-root.value_score, next(tie_breaker), root.node_id))
 
         expanded = 0
         while frontier and expanded < self.max_expansions:
-            _, _, thought_id = heapq.heappop(frontier)
-            thought = self.thoughts[thought_id]
-            if thought.state["status"] != "open":
+            _, _, node_id = heapq.heappop(frontier)
+            node = self.nodes[node_id]
+            if node.status != "open":
                 continue
 
             expanded += 1
-            rejected, accepted = self._expand_thought(task, thought)
-            self.rejected_thoughts.extend(rejected)
+            rejected, accepted = self._expand_node_with_graph_of_thoughts(task, node)
 
-            for child in accepted:
-                self.thoughts[child.id] = child
-                if child.solved:
+            for thought_state in rejected:
+                self.edges.append(
+                    ProofEdge(
+                        from_node=node.node_id,
+                        to_node=None,
+                        candidate=thought_state["candidate"],
+                        evaluation=thought_state["evaluation"],
+                    )
+                )
+
+            for thought_state in accepted:
+                candidate = thought_state["candidate"]
+                evaluation = thought_state["evaluation"]
+                proof_prefix = thought_state["proof_prefix"]
+                child = ProofNode(
+                    state=thought_state["lean_state"],
+                    proof_prefix=proof_prefix,
+                    parent_id=node.node_id,
+                    incoming_tactic=candidate.tactic,
+                    status="solved" if evaluation.result.solved else "open",
+                )
+                child.value_score = float(thought_state["value_score"])
+                self.nodes[child.node_id] = child
+                self.edges.append(
+                    ProofEdge(
+                        from_node=node.node_id,
+                        to_node=child.node_id,
+                        candidate=candidate,
+                        evaluation=evaluation,
+                    )
+                )
+
+                if evaluation.result.solved:
                     return SearchResult(
                         solved=True,
-                        proof=child.state["proof_prefix"],
-                        final_state=child.state["lean_state"],
-                        thoughts_expanded=expanded,
-                        graph_thoughts=len(self.thoughts),
-                        rejected_thoughts=len(self.rejected_thoughts),
+                        proof=child.proof_prefix,
+                        final_state=child.state,
+                        nodes_expanded=expanded,
+                        graph_nodes=len(self.nodes),
+                        failed_edges=self._failed_edge_count(),
                     )
 
                 heapq.heappush(
                     frontier,
-                    (-child.score, next(tie_breaker), child.id),
+                    (-child.value_score, next(tie_breaker), child.node_id),
                 )
 
-            thought.state["status"] = "expanded"
+            node.status = "expanded"
 
-        best = max(self.thoughts.values(), key=lambda item: item.score)
+        best = max(self.nodes.values(), key=lambda n: n.value_score)
         return SearchResult(
             solved=False,
-            proof=best.state["proof_prefix"],
-            final_state=best.state["lean_state"],
-            thoughts_expanded=expanded,
-            graph_thoughts=len(self.thoughts),
-            rejected_thoughts=len(self.rejected_thoughts),
+            proof=best.proof_prefix,
+            final_state=best.state,
+            nodes_expanded=expanded,
+            graph_nodes=len(self.nodes),
+            failed_edges=self._failed_edge_count(),
         )
 
-    def _expand_thought(
+    def _expand_node_with_graph_of_thoughts(
         self,
         task: TheoremTask,
-        thought: Thought,
-    ) -> tuple[list[Thought], list[Thought]]:
+        node: ProofNode,
+    ) -> tuple[list[dict], list[dict]]:
         graph = GraphOfOperations()
         generate = _GenerateTacticThoughts(
             task=task,
-            parent=thought,
+            node=node,
             provers=self.provers,
             candidates_per_prover=self.candidates_per_prover,
         )
@@ -310,13 +321,18 @@ class GraphOfThoughtProver:
             problem_parameters={},
         ).run()
 
-        return evaluate.rejected, keep.get_thoughts()
+        accepted: list[dict] = []
+        for thought in keep.get_thoughts():
+            state = dict(thought.state)
+            state["value_score"] = thought.score
+            accepted.append(state)
+        return evaluate.rejected, accepted
 
     def _score_thought_state(self, thought_state: dict) -> float:
-        return float(
-            self.value_model.predict(
-                thought_state["parent_state"],
-                thought_state["candidate"],
-                thought_state["evaluation"],
-            )
-        )
+        node = thought_state["node"]
+        candidate = thought_state["candidate"]
+        evaluation = thought_state["evaluation"]
+        return float(self.value_model.predict(node, candidate, evaluation))
+
+    def _failed_edge_count(self) -> int:
+        return sum(1 for edge in self.edges if edge.to_node is None)

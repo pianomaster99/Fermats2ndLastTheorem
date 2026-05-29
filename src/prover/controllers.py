@@ -3,14 +3,14 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from src.prover.lean_interface import LeanBackend
-from src.prover.data_types import ControllerEvaluation, ProofNode, TacticCandidate
+from src.prover.data_types import ControllerEvaluation, TacticCandidate
 
 
 class ControllerAgent(ABC):
     name: str
 
     @abstractmethod
-    def evaluate(self, node: ProofNode, candidate: TacticCandidate) -> ControllerEvaluation:
+    def evaluate(self, state: dict, candidate: TacticCandidate) -> ControllerEvaluation:
         raise NotImplementedError
 
 
@@ -21,9 +21,10 @@ class LeanValidityController(ControllerAgent):
         self.backend = backend
         self.name = name
 
-    def evaluate(self, node: ProofNode, candidate: TacticCandidate) -> ControllerEvaluation:
-        result = self.backend.apply_tactic(node.state, candidate.tactic)
-        progress = self._progress_score(node.state, result.state, result.valid, result.solved)
+    def evaluate(self, state: dict, candidate: TacticCandidate) -> ControllerEvaluation:
+        lean_state = state["lean_state"]
+        result = self.backend.apply_tactic(lean_state, candidate.tactic)
+        progress = self._progress_score(lean_state, result.state, result.valid, result.solved)
         value_hint = self._value_hint(progress, result.valid, result.solved)
         return ControllerEvaluation(
             candidate=candidate,
@@ -54,4 +55,3 @@ class LeanValidityController(ControllerAgent):
         if not valid:
             return 0.0
         return progress
-

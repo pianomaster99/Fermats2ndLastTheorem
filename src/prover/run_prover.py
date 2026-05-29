@@ -60,9 +60,9 @@ def main() -> None:
     result = prover.prove(task)
 
     print(f"solved: {result.solved}")
-    print(f"nodes expanded: {result.nodes_expanded}")
-    print(f"graph nodes: {result.graph_nodes}")
-    print(f"failed edges: {result.failed_edges}")
+    print(f"thoughts expanded: {result.thoughts_expanded}")
+    print(f"graph thoughts: {result.graph_thoughts}")
+    print(f"rejected thoughts: {result.rejected_thoughts}")
     print("proof:")
     for tactic in result.proof:
         print(f"  {tactic}")
@@ -70,10 +70,15 @@ def main() -> None:
     print(result.final_state)
     if args.show_attempts:
         print("attempts:")
-        for edge in prover.edges:
-            status = "valid" if edge.evaluation.result.valid else "invalid"
-            tactic = edge.candidate.tactic
-            source = edge.candidate.prover_name
+        attempts = list(prover.rejected_thoughts) + [
+            thought
+            for thought in prover.thoughts.values()
+            if thought.state.get("incoming_tactic")
+        ]
+        for thought in attempts:
+            status = "valid" if thought.valid else "invalid"
+            tactic = thought.state["candidate"].tactic
+            source = thought.state["candidate"].prover_name
             print(f"  [{status}] {source}: {tactic}")
 
 
