@@ -68,10 +68,13 @@ Current Lean state:
 Proof prefix so far:
 {os.linesep.join(node.proof_prefix) if node.proof_prefix else "(empty)"}
 """
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except Exception:
+            return []
         content = response.choices[0].message.content or "[]"
         return self._parse_candidates(content, k)
 

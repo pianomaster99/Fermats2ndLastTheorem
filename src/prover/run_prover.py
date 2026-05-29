@@ -18,8 +18,8 @@ def build_prover(args: argparse.Namespace) -> GraphOfThoughtProver:
     backend = PantographLeanBackend() if args.backend == "pantograph" else MockLeanBackend()
 
     provers = [] if args.openrouter_only else [ScriptedProverAgent()]
-    if args.model:
-        provers.append(OpenRouterProverAgent(model=args.model, name=f"openrouter:{args.model}"))
+    for model in args.model:
+        provers.append(OpenRouterProverAgent(model=model, name=f"openrouter:{model}"))
     if not provers:
         raise ValueError("No prover agents configured. Pass --model or remove --openrouter-only.")
 
@@ -36,7 +36,12 @@ def build_prover(args: argparse.Namespace) -> GraphOfThoughtProver:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the graph-of-thought Lean prover.")
     parser.add_argument("--backend", choices=["mock", "pantograph"], default="mock")
-    parser.add_argument("--model", default="", help="Optional OpenRouter model id for LLM tactics.")
+    parser.add_argument(
+        "--model",
+        action="append",
+        default=[],
+        help="Optional OpenRouter model id for LLM tactics. Pass multiple times for multiple agents.",
+    )
     parser.add_argument(
         "--openrouter-only",
         action="store_true",
@@ -44,6 +49,7 @@ def main() -> None:
     )
     parser.add_argument("--candidates-per-prover", type=int, default=5)
     parser.add_argument("--max-expansions", type=int, default=32)
+    parser.add_argument("--show-attempts", action="store_true")
     args = parser.parse_args()
 
     task = TheoremTask(
@@ -62,6 +68,13 @@ def main() -> None:
         print(f"  {tactic}")
     print("final state:")
     print(result.final_state)
+    if args.show_attempts:
+        print("attempts:")
+        for edge in prover.edges:
+            status = "valid" if edge.evaluation.result.valid else "invalid"
+            tactic = edge.candidate.tactic
+            source = edge.candidate.prover_name
+            print(f"  [{status}] {source}: {tactic}")
 
 
 if __name__ == "__main__":
