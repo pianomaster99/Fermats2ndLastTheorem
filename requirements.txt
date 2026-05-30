@@ -4,3 +4,4 @@ requests
 # lean-dojo-v2
 git+https://github.com/stanford-centaur/PyPantograph
 git+https://github.com/spcl/graph-of-thoughts.git
+google-genai

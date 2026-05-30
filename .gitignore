@@ -1,3 +1,6 @@
 .env
 __pycache__/
 .venv/
+data/**/*.full.json
+data/**/*.full.jsonl
+data/*.tar.gz
