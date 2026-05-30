@@ -43,6 +43,9 @@ def start_problem(self, problem: str):
 problem = """
 ∀ {α : Type} (xs ys : List α),
   (xs ++ ys).reverse = ys.reverse ++ xs.reverse"""
+problem = "∀ a b : Nat, (a + b) * (a + b) = a * a + 2 * a * b + b * b"
+
+print("hello")
 # cantor_problem = """
 # import Mathlib
 

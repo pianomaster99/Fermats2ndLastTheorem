@@ -3,6 +3,13 @@ from graph_of_thoughts.operations.thought import Thought
 from src.config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL
 from pantograph.server import Server
 import json
+from pathlib import Path
+
+#Points to project root directory
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+#Points to lean_project
+LEAN_PROJECT = PROJECT_ROOT / "lean_project"
 
 class EvaluatorAgent():
     """LLM that evaluate Lean tactics through OpenRouter."""
@@ -13,7 +20,7 @@ class EvaluatorAgent():
         self.name = name
         self.model = model
         self.client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=OPENROUTER_API_KEY)
-        self.server = Server()
+        self.server = Server(imports=["Mathlib.Tactic"], project_path=str(LEAN_PROJECT), timeout = 60)
         self.lean_states = {}
 
 
