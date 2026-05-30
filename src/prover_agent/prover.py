@@ -50,6 +50,11 @@ class ProverAgent():
 
         Previous evaluator feedback:
         {state.get("feedback", "") or "(none)"}
+
+        Previous failed tactic:
+        {state.get("failed_candidate", "") or "(none)"}
+
+        Do not repeat failed tactics.
         """
             
         response  = self.client.chat.completions.create(

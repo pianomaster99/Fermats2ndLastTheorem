@@ -44,6 +44,7 @@ problem = """
 ∀ {α : Type} (xs ys : List α),
   (xs ++ ys).reverse = ys.reverse ++ xs.reverse"""
 problem = "∀ a b : Nat, (a + b) * (a + b) = a * a + 2 * a * b + b * b"
+problem =     "IsOpen ({x : ℝ | x < 1})"
 
 print("hello")
 # cantor_problem = """
@@ -84,14 +85,30 @@ for i in range(10):
         if solved:
             print("Solved!")
             print(solved[0].state["proof"])
+            
             break
 
-
+        #Valid thoughts
         valid = [t for t in checked if t.state.get("valid")]
+
+        #Invalid thoughts
+        invalid = [t for t in checked if not t.state.get("valid")]
+
+        #No valid branches
         if not valid:
-            print("Branch failed, deleting this context")
+            print("No valid tactics. Retrying same context with feedback.")
+
+            # Pick the failed attempt with confident proposal.
+            retry = max(checked, key=lambda t: t.state.get("confidence", 0.0))
+
+            #Giving failed tactic to prover
+            retry.state["failed_candidate"] = retry.state.get("candidate", "")
+            retry.state["candidate"] = ""
+
+            next_frontier.append(retry)
+            #Retrying most confident proposal in same lean state
             continue
-        
+
         #Adding thoughts which work
         next_frontier.extend(valid)
 
