@@ -3,6 +3,7 @@ from graph_of_thoughts.operations import KeepBestN, Score
 
 from src.prover_agent.prover import ProverAgent
 from src.evaluator_agent.evaluator import EvaluatorAgent
+import time
 
 def start_problem(self, problem: str):
     #Initalize problem to check with lean
@@ -22,44 +23,44 @@ def start_problem(self, problem: str):
     })
 
 # problem = "∀ {p q : Prop}, p ∧ q → q ∧ p"
-problem = "∀ {p q : Prop}, p ∧ q → p"
+# problem = "∀ {p q : Prop}, p ∧ q → p"
 
-model = "google/gemma-4-26b-a4b-it:free"
-prover = ProverAgent(model=model)
-evaluator = EvaluatorAgent(model=model)
-thought = start_problem(evaluator, problem)
+# model = "openai/gpt-oss-20b:free"
+# prover = ProverAgent(model=model)
+# evaluator = EvaluatorAgent(model=model)
+# thought = start_problem(evaluator, problem)
 
 
-#Trialling a problem
-for i in range(10):
-    #Printing out the thoughts
-    print(f"\n=== Round {i + 1} ===")
-    print("Current thought:")
-    print(thought.state)
+# #Trialling a problem
+# for i in range(10):
+#     #Printing out the thoughts
+#     print(f"\n=== Round {i + 1} ===")
+#     print("Current thought:")
+#     print(thought.state)
 
-    proposals = prover.propose(thought, numThoughts=5)
+#     proposals = prover.propose(thought, numThoughts=5)
 
-    checked = [evaluator.evaluate(proposal) for proposal in proposals]
-    print("\nChecked thoughts:")
-    for j, checked_thought in enumerate(checked, start=1):
-        print(f"\nChecked {j}:")
-        print(checked_thought.state)
+#     checked = [evaluator.evaluate(proposal) for proposal in proposals]
+#     print("\nChecked thoughts:")
+#     for j, checked_thought in enumerate(checked, start=1):
+#         print(f"\nChecked {j}:")
+#         print(checked_thought.state)
 
-    solved = [t for t in checked if t.state.get("solved")]
-    if solved:
-        print("Solved!")
-        print(solved[0].state["proof"])
-        break
+#     solved = [t for t in checked if t.state.get("solved")]
+#     if solved:
+#         print("Solved!")
+#         print(solved[0].state["proof"])
+#         break
 
-    valid = [t for t in checked if t.state.get("valid")]
-    if not valid:
-        print("No valid tactics.")
-        break
+#     valid = [t for t in checked if t.state.get("valid")]
+#     if not valid:
+#         print("No valid tactics.")
+#         break
 
-    for t in valid:
-        t.score = t.state.get("score", 0.0)
+#     for t in valid:
+#         t.score = t.state.get("score", 0.0)
 
-    thought = max(valid, key=lambda t: t.score)
+#     thought = max(valid, key=lambda t: t.score)
 
 problems = [
     # Propositional logic
@@ -124,7 +125,7 @@ problems = [
 ]
 
 for problem in problems:
-    model = "google/gemma-4-26b-a4b-it:free"
+    model = "openai/gpt-oss-20b:free"
     prover = ProverAgent(model=model)
     evaluator = EvaluatorAgent(model=model)
     thought = start_problem(evaluator, problem)
@@ -132,12 +133,13 @@ for problem in problems:
 
     #Trialling a problem
     for i in range(10):
+        time.sleep(2) #Wait a bit to refresh open router rate limit
         #Printing out the thoughts
         print(f"\n=== Round {i + 1} ===")
         print("Current thought:")
         print(thought.state)
 
-        proposals = prover.propose(thought, numThoughts=5)
+        proposals = prover.propose(thought, numThoughts=2)
 
         checked = [evaluator.evaluate(proposal) for proposal in proposals]
         print("\nChecked thoughts:")
