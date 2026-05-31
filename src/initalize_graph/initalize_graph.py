@@ -45,6 +45,16 @@ problem = """
   (xs ++ ys).reverse = ys.reverse ++ xs.reverse"""
 problem = "∀ a b : Nat, (a + b) * (a + b) = a * a + 2 * a * b + b * b"
 problem =     "IsOpen ({x : ℝ | x < 1})"
+problem = """
+∀ {α : Type*} [TopologicalSpace α] [QuasiSeparatedSpace α]
+  {U V : Set α},
+  IsCompact U → IsCompact V → IsOpen U → IsOpen V → IsCompact (U ∩ V)
+"""
+problem = "∀ {α β γ : Type*} (f : β → γ) (g : α → β), Function.Injective f → Function.Injective g → Function.Injective (f ∘ g)"
+problem = """
+∀ {α : Type*} (xs : List α),
+  xs.reverse.reverse = xs
+"""
 
 print("hello")
 # cantor_problem = """
@@ -53,7 +63,7 @@ print("hello")
 # ∀ {α : Type}
 #   (f : α → Set α),
 #   ¬ Function.Surjective f"""
-model = "openai/gpt-oss-20b:free"
+model = "meta-llama/llama-3.3-70b-instruct:free'"
 prover = ProverAgent(model=model)
 evaluator = EvaluatorAgent(model=model)
 start_thought = start_problem(evaluator, problem)
@@ -100,9 +110,15 @@ for i in range(10):
 
             # Pick the failed attempt with confident proposal.
             retry = max(checked, key=lambda t: t.state.get("confidence", 0.0))
+            
+            failed_candidates = retry.state.get("failed_candidates", [])
 
-            #Giving failed tactic to prover
-            retry.state["failed_candidate"] = retry.state.get("candidate", "")
+            #Having list of failed candidates
+            if retry.state["candidate"] and retry.state["candidate"] not in failed_candidates:
+                failed_candidates.append(retry.state["candidate"])
+
+            retry.state["failed_candidates"] = failed_candidates
+
             retry.state["candidate"] = ""
 
             next_frontier.append(retry)

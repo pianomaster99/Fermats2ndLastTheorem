@@ -51,10 +51,15 @@ class ProverAgent():
         Previous evaluator feedback:
         {state.get("feedback", "") or "(none)"}
 
-        Previous failed tactic:
-        {state.get("failed_candidate", "") or "(none)"}
+        When feedback says a tactic requires a missing typeclass, do not retry the same theorem or method.
+        Prefer using lemmas/classes that appear directly in the current goal assumptions.
+
+        Previous failed attempts:
+        {state.get("failed_candidates", "") or "(none)"}
 
         Do not repeat failed tactics.
+        Use the evaluator feedback to propose a substantially different tactic.
+
         """
             
         response  = self.client.chat.completions.create(

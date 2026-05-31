@@ -92,13 +92,6 @@ class EvaluatorAgent():
 
         checked_state = self.lean_check(previous_thought).state
 
-        #If lean rejects the proof, no point in prompting llm
-        if not checked_state["valid"]:
-            return Thought({
-                **checked_state,
-                "feedback": f"Lean rejected the tactic: {checked_state['feedback']}",
-                "score": 0.0,
-            })
 
         #If lean solves the proof, it is correct
         if checked_state["solved"]:
@@ -108,7 +101,7 @@ class EvaluatorAgent():
                 "score": 1.0,
             })
         
-        #Call llm when lean is accepted but proof is not solved
+        #Called when proof is not solved
         prompt = f"""
         You are evaluating a Lean tactic attempt.
 
@@ -146,6 +139,16 @@ class EvaluatorAgent():
         raw_text = response.choices[0].message.content or "{}"
         llm_eval = json.loads(raw_text)
         llm_feedback = llm_eval.get("feedback", llm_eval.get("evaluation", ""))
+
+        #When lean is inccorect
+        if not checked_state["valid"]:
+            return Thought({
+                **checked_state,
+                "failed_candidate": checked_state.get("candidate", ""),
+                "feedback": f"Lean rejected the tactic: {checked_state['feedback']} LLM feedback: {llm_feedback}",
+                "score": 0.0,
+            })
+
         return Thought({
             **checked_state,
             "feedback": f"Lean accepted the tactic. {llm_feedback}".strip(),
