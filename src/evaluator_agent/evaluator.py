@@ -6,6 +6,11 @@ import json
 from pathlib import Path
 from abc import ABC, abstractmethod
 
+
+
+
+
+
 #Points to project root directory
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -76,7 +81,7 @@ class EvaluatorAgent(ABC):
 class OpenRouterEvaluatorAgent(EvaluatorAgent):
     """LLM that evaluate Lean tactics through OpenRouter."""
 
-    def __init__(self, model: str, name: str = "openrouter") -> None:
+    def __init__(self, model, name ="openrouter") -> None:
         super().__init__()
 
         #Setting up the model
@@ -146,7 +151,10 @@ class OpenRouterEvaluatorAgent(EvaluatorAgent):
             messages=[{"role": "user", "content": prompt}],
         )
         raw_text = response.choices[0].message.content or "{}"
-        llm_eval = json.loads(raw_text)
+        try:
+            llm_eval = _parse_json_object(raw_text)
+        except (json.JSONDecodeError, ValueError) as exc:
+            llm_eval = _fallback_eval(raw_text, exc)
         llm_feedback = llm_eval.get("feedback", llm_eval.get("evaluation", ""))
 
         #When lean is inccorect
@@ -167,7 +175,7 @@ class OpenRouterEvaluatorAgent(EvaluatorAgent):
 class GeminiEvaluatorAgent(EvaluatorAgent):
     """LLM that evaluates Lean tactics through Gemini."""
 
-    def __init__(self, model: str = "gemini-2.5-flash", name: str = "gemini") -> None:
+    def __init__(self, model = "gemini-2.5-flash", name = "gemini") -> None:
         super().__init__()
         from src.gemini import GeminiClient
 
@@ -224,17 +232,19 @@ class GeminiEvaluatorAgent(EvaluatorAgent):
         Current Lean state after tactic:
         {checked_state["lean_state"]}
 
-        Return exactly JSON:
+        Return only a valid JSON object.
+        Do not include markdown, code fences, explanations, or any text before or after the JSON.
+
+        Schema:
         {{
         "feedback": "short critique",
         "score": number from 0 to 1
         }}
-
-        Do not include markdown.
         """
 
         response = self.client.ask(prompt) or "{}"
-        llm_eval = json.loads(response)
+        print(response)
+        llm_eval = self.client.parse_json_object(response)
         llm_feedback = llm_eval.get("feedback", llm_eval.get("evaluation", ""))
 
         #When lean is inccorect

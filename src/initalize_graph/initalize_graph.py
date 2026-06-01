@@ -1,8 +1,8 @@
 from graph_of_thoughts.operations.thought import Thought
 from graph_of_thoughts.operations import KeepBestN, Score
 
-from src.prover_agent.prover import ProverAgent
-from src.evaluator_agent.evaluator import OpenRouterEvaluatorAgent
+from src.prover_agent.prover import OpenRouterProverAgent, GeminiProverAgent
+from src.evaluator_agent.evaluator import OpenRouterEvaluatorAgent, GeminiEvaluatorAgent
 import time
 
 def start_problem(self, problem: str):
@@ -63,9 +63,12 @@ print("hello")
 # ∀ {α : Type}
 #   (f : α → Set α),
 #   ¬ Function.Surjective f"""
-model = "meta-llama/llama-3.3-70b-instruct:free'"
-prover = ProverAgent(model=model)
-evaluator = OpenRouterEvaluatorAgent(model=model)
+model = "openai/gpt-oss-20b:free"
+# prover = OpenRouterProverAgent(model=model)
+prover = GeminiProverAgent()
+# evaluator = OpenRouterEvaluatorAgent(model=model)
+evaluator = GeminiEvaluatorAgent()
+
 start_thought = start_problem(evaluator, problem)
 
 #Keeping top _ thoughts
