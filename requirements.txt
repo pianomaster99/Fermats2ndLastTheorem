@@ -5,3 +5,4 @@ scikit-learn
 git+https://github.com/stanford-centaur/PyPantograph
 git+https://github.com/spcl/graph-of-thoughts.git
 google-genai
+lean-dojo-v2
