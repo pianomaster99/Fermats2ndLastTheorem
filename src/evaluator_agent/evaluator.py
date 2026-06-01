@@ -150,11 +150,16 @@ class OpenRouterEvaluatorAgent(EvaluatorAgent):
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw_text = response.choices[0].message.content or "{}"
-        try:
-            llm_eval = _parse_json_object(raw_text)
-        except (json.JSONDecodeError, ValueError) as exc:
-            llm_eval = _fallback_eval(raw_text, exc)
+        
+        response = response.choices[0].message.content or "{}"
+        print(response)
+        response = response.strip()
+
+        if response.startswith("```"):
+            response = response.removeprefix("```json").removeprefix("```").strip()
+            response = response.removesuffix("```").strip()
+
+        llm_eval = json.loads(response)
         llm_feedback = llm_eval.get("feedback", llm_eval.get("evaluation", ""))
 
         #When lean is inccorect
@@ -220,6 +225,12 @@ class GeminiEvaluatorAgent(EvaluatorAgent):
         Candidate tactic:
         {checked_state["candidate"]}
 
+        Prover rationale:
+        {checked_state.get("rationale")}
+
+        Prover confidence:
+        {checked_state.get("confidence")}
+
         Lean accepted tactic:
         {checked_state["valid"]}
 
@@ -238,14 +249,22 @@ class GeminiEvaluatorAgent(EvaluatorAgent):
         Schema:
         {{
         "feedback": "short critique",
-        "score": number from 0 to 1
+        "score": number from 0 to 1,
         }}
         """
 
         response = self.client.ask(prompt) or "{}"
         print(response)
-        llm_eval = self.client.parse_json_object(response)
+        response = response.strip()
+
+        if response.startswith("```"):
+            response = response.removeprefix("```json").removeprefix("```").strip()
+            response = response.removesuffix("```").strip()
+
+        llm_eval = json.loads(response)
         llm_feedback = llm_eval.get("feedback", llm_eval.get("evaluation", ""))
+
+        #LLM score only matters when all the ideas are rejected, which one is still closest
 
         #When lean is inccorect
         if not checked_state["valid"]:
@@ -253,11 +272,15 @@ class GeminiEvaluatorAgent(EvaluatorAgent):
                 **checked_state,
                 "failed_candidate": checked_state.get("candidate", ""),
                 "feedback": f"Lean rejected the tactic: {checked_state['feedback']} LLM feedback: {llm_feedback}",
-                "score": 0.0,
+                "score": 0,
+                "llm score": float(llm_eval.get("score", 0.5)),
+
             })
 
         return Thought({
             **checked_state,
             "feedback": f"Lean accepted the tactic. {llm_feedback}".strip(),
             "score": float(llm_eval.get("score", 0.5)),
+            "llm score": float(llm_eval.get("score", 0.5)),
+
         })

@@ -147,7 +147,13 @@ class GeminiProverAgent(ProverAgent):
 
         """
             
-        response  = self.client.ask(prompt)
+        response = self.client.ask(prompt) or "{}"
+        response = response.strip()
+
+        if response.startswith("```"):
+            response = response.removeprefix("```json").removeprefix("```").strip()
+            response = response.removesuffix("```").strip()
+
         proposals = json.loads(response)
         thoughts = []
         for proposal in proposals:

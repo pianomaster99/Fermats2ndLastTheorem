@@ -5,7 +5,7 @@ from src.prover_agent.prover import OpenRouterProverAgent, GeminiProverAgent
 from src.evaluator_agent.evaluator import OpenRouterEvaluatorAgent, GeminiEvaluatorAgent
 import time
 
-def start_problem(self, problem: str):
+def start_problem(self, problem):
     #Initalize problem to check with lean
     goal_state = self.server.goal_start(problem)
     lean_state = str(goal_state).strip()
@@ -63,7 +63,7 @@ print("hello")
 # ∀ {α : Type}
 #   (f : α → Set α),
 #   ¬ Function.Surjective f"""
-model = "openai/gpt-oss-20b:free"
+# model = "openai/gpt-oss-20b:free"
 # prover = OpenRouterProverAgent(model=model)
 prover = GeminiProverAgent()
 # evaluator = OpenRouterEvaluatorAgent(model=model)
@@ -72,7 +72,7 @@ evaluator = GeminiEvaluatorAgent()
 start_thought = start_problem(evaluator, problem)
 
 #Keeping top _ thoughts
-keep_n_thoughts = 3
+keep_n_thoughts = 5
 
 frontier = [start_thought]
 #Trialling a problem
