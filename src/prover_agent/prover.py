@@ -35,6 +35,11 @@ class OpenRouterProverAgent(ProverAgent):
         state = previous_thought.state
 
         prompt = f"""
+        Lean environment:
+        - Lean 4 project
+        - Mathlib version: leanprover-community/mathlib v4.29.1
+        - Backend: Pantograph `goal_tactic`
+        
         You are a Lean theorem-proving agent.
 
         Return exactly a JSON array of up to {numThoughts} objects. Each object must have:

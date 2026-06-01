@@ -8,16 +8,6 @@ from graph_of_thoughts.operations.thought import Thought
 def make_lesson(t):
     candidate = t.state.get("candidate", "")
     feedback = t.state.get("feedback", "")
-
-    if "Unknown identifier" in feedback:
-        return f"Do not reuse identifiers from failed tactic `{candidate}`. Lean said: {feedback}"
-
-    if "parseError" in feedback or "Cannot parse" in feedback:
-        return f"Do not reuse this syntax style: `{candidate}`. Lean could not parse it."
-
-    if "unknown tactic" in feedback:
-        return f"Do not use the tactic from `{candidate}`. Lean said it is unknown."
-
     return f"Failed tactic `{candidate}`. Reason: {feedback}"
 
 def start_problem(evaluator, problem):
@@ -38,9 +28,9 @@ def start_problem(evaluator, problem):
 
 DATASET_PATH = Path("data/pantograph_goals_mathlib_tactic_verified.json")
 
-NUM_ROUNDS = 20
-KEEP_N_THOUGHTS = 5
-NUM_PROPOSALS = 5
+NUM_ROUNDS = 10
+KEEP_N_THOUGHTS = 3
+NUM_PROPOSALS = 3
 
 #Having our model try the problem as specified in initialized_graph
 def run_problem(problem, prover, evaluator, name="unknown"):

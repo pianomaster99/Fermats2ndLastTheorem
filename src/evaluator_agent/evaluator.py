@@ -246,10 +246,14 @@ class GeminiEvaluatorAgent(EvaluatorAgent):
         Return only a valid JSON object.
         Do not include markdown, code fences, explanations, or any text before or after the JSON.
 
+        Score valid tactics by how much they reduce the remaining Lean goal.
+        A tactic that normalizes the goal close to the final obstruction should score higher.
+        A tactic that solve the goal apart from syntax should be scored higher.
+        Do not score 1 unless it is solved
         Schema:
         {{
         "feedback": "short critique",
-        "score": number from 0 to 1,
+        "score": number from 0 to 0.99,
         }}
         """
 
