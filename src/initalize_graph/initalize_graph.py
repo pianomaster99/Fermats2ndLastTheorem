@@ -63,7 +63,7 @@ print("hello")
 # ∀ {α : Type}
 #   (f : α → Set α),
 #   ¬ Function.Surjective f"""
-# model = "openai/gpt-oss-20b:free"
+model = "openai/gpt-oss-20b:free"
 # prover = OpenRouterProverAgent(model=model)
 prover = GeminiProverAgent()
 # evaluator = OpenRouterEvaluatorAgent(model=model)

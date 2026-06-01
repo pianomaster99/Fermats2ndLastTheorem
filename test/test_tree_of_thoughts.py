@@ -5,6 +5,20 @@ from src.prover_agent.prover import GeminiProverAgent
 from src.evaluator_agent.evaluator import GeminiEvaluatorAgent
 from graph_of_thoughts.operations.thought import Thought
 
+def make_lesson(t):
+    candidate = t.state.get("candidate", "")
+    feedback = t.state.get("feedback", "")
+
+    if "Unknown identifier" in feedback:
+        return f"Do not reuse identifiers from failed tactic `{candidate}`. Lean said: {feedback}"
+
+    if "parseError" in feedback or "Cannot parse" in feedback:
+        return f"Do not reuse this syntax style: `{candidate}`. Lean could not parse it."
+
+    if "unknown tactic" in feedback:
+        return f"Do not use the tactic from `{candidate}`. Lean said it is unknown."
+
+    return f"Failed tactic `{candidate}`. Reason: {feedback}"
 
 def start_problem(evaluator, problem):
     goal_state = evaluator.server.goal_start(problem)
@@ -72,6 +86,13 @@ def run_problem(problem, prover, evaluator, name="unknown"):
             valid = [t for t in checked if t.state.get("valid")]
 
             if not valid:
+
+                previous_lessons = thought.state.get("lessons", [])
+                previous_failed = thought.state.get("failed_candidates", [])
+
+                new_lessons = []
+
+
                 print("No valid tactics. Retrying same context with feedback.")
                 checked.sort(key=lambda t: t.state.get("llm score", 0.0), reverse=True)
                 failed_candidates = []
@@ -79,10 +100,17 @@ def run_problem(problem, prover, evaluator, name="unknown"):
                     candidate = failed.state.get("candidate")
                     if candidate and candidate not in failed_candidates:
                         failed_candidates.append(candidate)
+                
+                    lesson = make_lesson(failed)
+                    if lesson not in new_lessons:
+                        new_lessons.append(lesson)
+                all_lessons = previous_lessons + new_lessons
 
                 #Keep top 3 invalid thoughts
                 for retry in checked[:3]:
                     retry.state["failed_candidates"] = failed_candidates
+                    retry.state["lessons"] = all_lessons[-10:]
+                    retry.state["feedback"] = "\n".join(all_lessons[-10:])
                     retry.state["candidate"] = ""
                     retry.state["valid"] = False
                     retry.state["solved"] = False

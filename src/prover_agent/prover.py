@@ -133,18 +133,17 @@ class GeminiProverAgent(ProverAgent):
         Current goals:
         {state.get("goals", [])}
 
-        Previous evaluator feedback:
-        {state.get("feedback", "") or "(none)"}
-
-        When feedback says a tactic requires a missing typeclass, do not retry the same theorem or method.
-        Prefer using lemmas/classes that appear directly in the current goal assumptions.
-
         Previous failed attempts:
-        {state.get("failed_candidates", "") or "(none)"}
+        {state.get("failed_candidates", [])}
 
-        Do not repeat failed tactics.
-        Use the evaluator feedback to propose a substantially different tactic.
+        Lessons from previous failed attempts:
+        {state.get("lessons", [])}
 
+        Hard rules:
+        - Do not repeat failed tactics.
+        - Do not reuse identifiers that Lean reported as unknown.
+        - Do not reuse syntax styles that caused parse errors.
+        - If a lemma name was unknown, try a different lemma name or a tactic that avoids naming it.
         """
             
         response = self.client.ask(prompt) or "{}"
