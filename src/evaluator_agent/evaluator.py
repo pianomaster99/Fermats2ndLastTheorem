@@ -276,8 +276,14 @@ class GeminiEvaluatorAgent(EvaluatorAgent):
             response = response.removeprefix("```json").removeprefix("```").strip()
             response = response.removesuffix("```").strip()
 
-        llm_eval = json.loads(response)
-        llm_feedback = llm_eval.get("feedback", llm_eval.get("evaluation", ""))
+        try:
+            llm_eval = json.loads(response)
+        except json.JSONDecodeError:
+            llm_eval = {
+                "feedback": response,
+                "score": 0.0,
+            }
+        llm_feedback = llm_eval.get("feedback", "")
 
         #LLM score only matters when all the ideas are rejected, which one is still closest
 

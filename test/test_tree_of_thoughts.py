@@ -1,18 +1,39 @@
 import json
 from pathlib import Path
 
-from src.prover_agent.prover import GeminiProverAgent
-from src.evaluator_agent.evaluator import GeminiEvaluatorAgent
+from src.prover_agent.prover import OpenRouterProverAgent, GeminiProverAgent
+from src.evaluator_agent.evaluator import OpenRouterEvaluatorAgent, GeminiEvaluatorAgent
 from graph_of_thoughts.operations.thought import Thought
+from tqdm import tqdm
+
+import sys
+#Output both print to terminal and file
+class Tee:
+    def __init__(self, filename):
+        self.file = open(filename, "w")
+        self.stdout = sys.stdout
+
+    def write(self, text):
+        self.stdout.write(text)  # terminal
+        self.file.write(text)    # file
+
+    def flush(self):
+        self.stdout.flush()
+        self.file.flush()
+
+sys.stdout = Tee("test/output.txt")
+
+print("Hello")
+
 def make_clean_lessons(t):
     candidate = t.state.get("candidate", "")
     feedback = t.state.get("feedback", "")
 
     if "parseError" in feedback or "Cannot parse as one tactic block" in feedback:
-        return "Do not reuse this syntax style: `{candidate}`."
+        return f"Do not reuse this syntax style: `{candidate}`."
 
     if "unknown tactic" in feedback:
-        return "Do not use tactic `{candidate.split()[0]}`; Lean says it is unknown."
+        return f"Do not use tactic `{candidate.split()[0]}`; Lean says it is unknown."
 
     if "," in candidate:
         return "Use semicolons or newlines to sequence tactics, not commas."
@@ -93,13 +114,20 @@ def run_problem(problem, prover, evaluator, name="unknown"):
             new_lessons = []
             previous_lessons = thought.state.get("lessons", [])
             for checked_thought in checked:
-                lesson = make_clean_lessons(checked_thought)
-                if lesson not in new_lessons:
-                    new_lessons.append(lesson)
+                lessons = make_clean_lessons(checked_thought)
+                if isinstance(lessons, str):
+                    lessons = [lessons]
+                for lesson in lessons:
+                    if not lesson:
+                        continue
+                    if len(lesson) > 250:
+                        continue
+                    if lesson not in new_lessons:
+                        new_lessons.append(lesson)
             all_lessons = previous_lessons + new_lessons
             for valid_thought in valid:
-                valid_thought.state["lessons"] = all_lessons[-10:]
-                valid_thought.state["feedback"] = "\n".join(all_lessons[-10:])
+                valid_thought.state["lessons"] = all_lessons[-5:]
+                valid_thought.state["feedback"] = "\n".join(all_lessons[-5:])
             if not valid:
                 print("No valid tactics. Retrying same context with feedback.")
                 checked.sort(key=lambda t: t.state.get("llm score", 0.0), reverse=True)
@@ -108,15 +136,13 @@ def run_problem(problem, prover, evaluator, name="unknown"):
                     candidate = failed.state.get("candidate")
                     if candidate and candidate not in failed_candidates:
                         failed_candidates.append(candidate)
-                
 
-                all_lessons = previous_lessons + new_lessons
 
                 #Keep top 3 invalid thoughts
                 for retry in checked[:3]:
-                    retry.state["failed_candidates"] = failed_candidates[-20:]
-                    retry.state["lessons"] = all_lessons[-10:]
-                    retry.state["feedback"] = "\n".join(all_lessons[-10:])
+                    retry.state["failed_candidates"] = failed_candidates[-5:]
+                    retry.state["lessons"] = all_lessons[-5:]
+                    retry.state["feedback"] = "\n".join(all_lessons[-5:])
                     retry.state["candidate"] = ""
                     retry.state["valid"] = False
                     retry.state["solved"] = False
@@ -142,9 +168,9 @@ def run_problem(problem, prover, evaluator, name="unknown"):
 
 with DATASET_PATH.open() as f:
     data = json.load(f)
-
-prover = GeminiProverAgent()
-evaluator = GeminiEvaluatorAgent()
+# prover = OpenRouterProverAgent("qwen/qwen3-coder:free")
+prover = GeminiProverAgent("gemini-2.5-flash")
+evaluator = GeminiEvaluatorAgent("gemini-2.5-flash")
 
 results = []
 solved_count = 0

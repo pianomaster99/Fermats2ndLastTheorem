@@ -61,8 +61,7 @@ class OpenRouterProverAgent(ProverAgent):
         Previous evaluator feedback:
         {state.get("feedback", "") or "(none)"}
 
-        When feedback says a tactic requires a missing typeclass, do not retry the same theorem or method.
-        Prefer using lemmas/classes that appear directly in the current goal assumptions.
+        Take lean feedback as fact and LLM feedback as suggestion
 
         Previous failed attempts:
         {state.get("failed_candidates", "") or "(none)"}
@@ -135,9 +134,6 @@ class GeminiProverAgent(ProverAgent):
         Lean state so far:
         {state.get("lean_state", "") or "(empty)"}
 
-        Current goals:
-        {state.get("goals", [])}
-
         Previous failed attempts:
         {state.get("failed_candidates", [])}
 
@@ -157,6 +153,10 @@ class GeminiProverAgent(ProverAgent):
         if response.startswith("```"):
             response = response.removeprefix("```json").removeprefix("```").strip()
             response = response.removesuffix("```").strip()
+        try:
+            proposals = json.loads(response)
+        except json.JSONDecodeError:
+            proposal = []
 
         proposals = json.loads(response)
         thoughts = []
