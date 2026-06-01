@@ -2,7 +2,7 @@ from graph_of_thoughts.operations.thought import Thought
 from graph_of_thoughts.operations import KeepBestN, Score
 
 from src.prover_agent.prover import ProverAgent
-from src.evaluator_agent.evaluator import EvaluatorAgent
+from src.evaluator_agent.evaluator import OpenRouterEvaluatorAgent
 import time
 
 def start_problem(self, problem: str):
@@ -65,7 +65,7 @@ print("hello")
 #   ¬ Function.Surjective f"""
 model = "meta-llama/llama-3.3-70b-instruct:free'"
 prover = ProverAgent(model=model)
-evaluator = EvaluatorAgent(model=model)
+evaluator = OpenRouterEvaluatorAgent(model=model)
 start_thought = start_problem(evaluator, problem)
 
 #Keeping top _ thoughts
