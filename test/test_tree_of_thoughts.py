@@ -90,30 +90,31 @@ def run_problem(problem, prover, evaluator, name="unknown"):
                 }
 
             valid = [t for t in checked if t.state.get("valid")]
-
+            new_lessons = []
+            previous_lessons = thought.state.get("lessons", [])
+            for checked_thought in checked:
+                lesson = make_clean_lessons(checked_thought)
+                if lesson not in new_lessons:
+                    new_lessons.append(lesson)
+            all_lessons = previous_lessons + new_lessons
+            for valid_thought in valid:
+                valid_thought.state["lessons"] = all_lessons[-10:]
+                valid_thought.state["feedback"] = "\n".join(all_lessons[-10:])
             if not valid:
-
-                previous_lessons = thought.state.get("lessons", [])
-
-                new_lessons = []
-
-
                 print("No valid tactics. Retrying same context with feedback.")
                 checked.sort(key=lambda t: t.state.get("llm score", 0.0), reverse=True)
-                failed_candidates = []
+                failed_candidates = list(thought.state.get("failed_candidates", []))
                 for failed in checked:
                     candidate = failed.state.get("candidate")
                     if candidate and candidate not in failed_candidates:
                         failed_candidates.append(candidate)
                 
-                    lesson = make_clean_lessons(failed)
-                    if lesson not in new_lessons:
-                        new_lessons.append(lesson)
+
                 all_lessons = previous_lessons + new_lessons
 
                 #Keep top 3 invalid thoughts
                 for retry in checked[:3]:
-                    retry.state["failed_candidates"] = failed_candidates
+                    retry.state["failed_candidates"] = failed_candidates[-20:]
                     retry.state["lessons"] = all_lessons[-10:]
                     retry.state["feedback"] = "\n".join(all_lessons[-10:])
                     retry.state["candidate"] = ""
