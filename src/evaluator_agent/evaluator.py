@@ -119,6 +119,12 @@ class OpenRouterEvaluatorAgent(EvaluatorAgent):
         prompt = f"""
         You are evaluating a Lean tactic attempt.
 
+        Lean environment:
+        - Lean 4 project
+        - Mathlib version: leanprover-community/mathlib v4.29.1
+        - Backend: Pantograph `goal_tactic`
+        
+
         Theorem:
         {checked_state["problem"]}
 
@@ -218,6 +224,11 @@ class GeminiEvaluatorAgent(EvaluatorAgent):
         #Called when proof is not solved
         prompt = f"""
         You are evaluating a Lean tactic attempt.
+        Lean environment:
+        - Lean 4 project
+        - Mathlib version: leanprover-community/mathlib v4.29.1
+        - Backend: Pantograph `goal_tactic`
+        
 
         Theorem:
         {checked_state["problem"]}

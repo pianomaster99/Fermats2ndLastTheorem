@@ -4,7 +4,23 @@ from pathlib import Path
 from src.prover_agent.prover import GeminiProverAgent
 from src.evaluator_agent.evaluator import GeminiEvaluatorAgent
 from graph_of_thoughts.operations.thought import Thought
+def make_clean_lessons(t):
+    candidate = t.state.get("candidate", "")
+    feedback = t.state.get("feedback", "")
 
+    if "parseError" in feedback or "Cannot parse as one tactic block" in feedback:
+        return "Do not reuse this syntax style: `{candidate}`."
+
+    if "unknown tactic" in feedback:
+        return "Do not use tactic `{candidate.split()[0]}`; Lean says it is unknown."
+
+    if "," in candidate:
+        return "Use semicolons or newlines to sequence tactics, not commas."
+
+    if "✝" in candidate:
+        return "Do not use names containing `✝`; they are Lean pretty-printer artifacts."
+
+    return make_lesson(t)
 def make_lesson(t):
     candidate = t.state.get("candidate", "")
     feedback = t.state.get("feedback", "")
@@ -78,7 +94,6 @@ def run_problem(problem, prover, evaluator, name="unknown"):
             if not valid:
 
                 previous_lessons = thought.state.get("lessons", [])
-                previous_failed = thought.state.get("failed_candidates", [])
 
                 new_lessons = []
 
@@ -91,7 +106,7 @@ def run_problem(problem, prover, evaluator, name="unknown"):
                     if candidate and candidate not in failed_candidates:
                         failed_candidates.append(candidate)
                 
-                    lesson = make_lesson(failed)
+                    lesson = make_clean_lessons(failed)
                     if lesson not in new_lessons:
                         new_lessons.append(lesson)
                 all_lessons = previous_lessons + new_lessons
