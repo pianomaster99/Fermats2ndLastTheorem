@@ -17,16 +17,8 @@ class GeminiClient:
         self.client = genai.Client()
 
     def ask(self, prompt):
-<<<<<<< HEAD
         #Ask gemini model
         response = self.client.models.generate_content(model=self.model, contents=prompt)
-=======
-        # Ask Gemini model
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-        )
->>>>>>> 535bd31964e4967a9f936a44d273368beabc13ae
 
         return response.text.strip()
 
