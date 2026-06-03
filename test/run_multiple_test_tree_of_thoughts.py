@@ -6,9 +6,13 @@ from src.evaluator_agent.evaluator import OpenRouterEvaluatorAgent, GeminiEvalua
 from graph_of_thoughts.operations.thought import Thought
 from tqdm import tqdm
 import time
+import sys
 
 print(time.time())
 import sys
+starting_index = int(sys.argv[1])
+print(type(starting_index))
+ending_index = int(sys.argv[2])
 #Output both print to terminal and file
 class Tee:
     def __init__(self, filename):
@@ -23,7 +27,7 @@ class Tee:
         self.stdout.flush()
         self.file.flush()
 
-sys.stdout = Tee("test/output.txt")
+sys.stdout = Tee(f"test/output{starting_index}-{ending_index}.txt")
 
 print("Hello")
 
@@ -177,7 +181,12 @@ evaluator = GeminiEvaluatorAgent("gemini-2.5-flash")
 results = []
 solved_count = 0
 error_count = 0
+
 for i, item in tqdm(enumerate(data)):
+    if i < starting_index - 1:
+        continue
+    if i > ending_index:
+        continue
     try:
         print(time.time())
         name = item.get("name", f"item_{i}")

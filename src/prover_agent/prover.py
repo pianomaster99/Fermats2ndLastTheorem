@@ -71,24 +71,13 @@ class OpenRouterProverAgent(ProverAgent):
 
         """
             
-        response  = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1024,
-        )
+        response  = self.client.chat.completions.create(model=self.model, messages=[{"role": "user", "content": prompt}], max_tokens=1024)
         raw_text = response.choices[0].message.content or "[]"
 
         proposals = json.loads(raw_text)
         thoughts = []
         for proposal in proposals:
-            new_state = {
-                **state,
-                "candidate": proposal["tactic"],
-                "rationale": proposal.get("rationale", ""),
-                "confidence": proposal.get("confidence", 0.0),
-                "valid": False,
-                "solved": False,
-            }
+            new_state = {**state, "candidate": proposal["tactic"], "rationale": proposal.get("rationale", ""), "confidence": proposal.get("confidence", 0.0), "valid": False, "solved": False}
 
             thoughts.append(Thought(new_state))
 
@@ -161,14 +150,7 @@ class GeminiProverAgent(ProverAgent):
         proposals = json.loads(response)
         thoughts = []
         for proposal in proposals:
-            new_state = {
-                **state,
-                "candidate": proposal["tactic"],
-                "rationale": proposal.get("rationale", ""),
-                "confidence": proposal.get("confidence", 0.0),
-                "valid": False,
-                "solved": False,
-            }
+            new_state = {**state, "candidate": proposal["tactic"], "rationale": proposal.get("rationale", ""), "confidence": proposal.get("confidence", 0.0), "valid": False, "solved": False}
 
             thoughts.append(Thought(new_state))
 

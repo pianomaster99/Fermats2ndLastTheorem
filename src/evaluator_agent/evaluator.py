@@ -10,7 +10,6 @@ from abc import ABC, abstractmethod
 
 
 
-
 #Points to project root directory
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -262,10 +261,7 @@ class GeminiEvaluatorAgent(EvaluatorAgent):
         A tactic that solve the goal apart from syntax should be scored higher.
         Do not score 1 unless it is solved
         Schema:
-        {{
-        "feedback": "short critique",
-        "score": number from 0 to 0.99,
-        }}
+        {{"feedback": "short critique","score": number from 0 to 0.99}}
         """
 
         response = self.client.ask(prompt) or "{}"
@@ -279,29 +275,13 @@ class GeminiEvaluatorAgent(EvaluatorAgent):
         try:
             llm_eval = json.loads(response)
         except json.JSONDecodeError:
-            llm_eval = {
-                "feedback": response,
-                "score": 0.0,
-            }
+            llm_eval = {"feedback": response, "score": 0.0}
         llm_feedback = llm_eval.get("feedback", "")
 
         #LLM score only matters when all the ideas are rejected, which one is still closest
 
         #When lean is inccorect
         if not checked_state["valid"]:
-            return Thought({
-                **checked_state,
-                "failed_candidate": checked_state.get("candidate", ""),
-                "feedback": f"Lean rejected the tactic: {checked_state['feedback']} LLM feedback: {llm_feedback}",
-                "score": 0,
-                "llm score": float(llm_eval.get("score", 0.5)),
+            return Thought({**checked_state, "failed_candidate": checked_state.get("candidate", ""), "feedback": f"Lean rejected the tactic: {checked_state['feedback']} LLM feedback: {llm_feedback}", "score": 0, "llm score": float(llm_eval.get("score", 0.5))})
 
-            })
-
-        return Thought({
-            **checked_state,
-            "feedback": f"Lean accepted the tactic. {llm_feedback}".strip(),
-            "score": float(llm_eval.get("score", 0.5)),
-            "llm score": float(llm_eval.get("score", 0.5)),
-
-        })
+        return Thought({**checked_state, "feedback": f"Lean accepted the tactic. {llm_feedback}".strip(), "score": float(llm_eval.get("score", 0.5)), "llm score": float(llm_eval.get("score", 0.5))})

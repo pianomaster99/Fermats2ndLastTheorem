@@ -16,10 +16,7 @@ class GeminiClient:
 
     def ask(self, prompt):
         #Ask gemini model
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-        )
+        response = self.client.models.generate_content(model=self.model, contents=prompt)
 
         return response.text.strip()
     
