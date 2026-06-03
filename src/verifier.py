@@ -1,10 +1,10 @@
 from pantograph.server import Server
 
 class Verifier:
-    def __init__(self, imports=None, project_path=None):
+    def __init__(self, imports=None, project_path=None, timeout=120):
         if imports is None:
             imports = ["Init"]
-        self.server = Server(imports=imports, project_path=project_path)
+        self.server = Server(imports=imports, project_path=project_path, timeout=timeout)
 
     def start_goal(self, goal: str):
         return self.server.goal_start(goal)
