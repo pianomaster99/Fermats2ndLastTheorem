@@ -1,25 +1,35 @@
 import os
+import json
 from dotenv import load_dotenv
 from google import genai
 
-import json
+
 load_dotenv()
 
 
 DEFAULT_MODEL = "gemini-2.5-flash"
 
+
 class GeminiClient:
-    def __init__(self, model = DEFAULT_MODEL):
+    def __init__(self, model=DEFAULT_MODEL):
         load_dotenv()
         self.model = model
         self.client = genai.Client()
 
     def ask(self, prompt):
+<<<<<<< HEAD
         #Ask gemini model
         response = self.client.models.generate_content(model=self.model, contents=prompt)
+=======
+        # Ask Gemini model
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+        )
+>>>>>>> 535bd31964e4967a9f936a44d273368beabc13ae
 
         return response.text.strip()
-    
+
     def parse_json_object(self, raw_text):
         text = raw_text.strip()
 
@@ -34,18 +44,7 @@ class GeminiClient:
 
             text = "\n".join(lines).strip()
 
-        try:
-            parsed = json.loads(text)
-        except json.JSONDecodeError:
-            start = text.find("{")
-            end = text.rfind("}")
+        if text.startswith("json"):
+            text = text[len("json"):].strip()
 
-            if start == -1 or end == -1 or end <= start:
-                raise
-
-            parsed = json.loads(text[start:end + 1])
-
-        if not isinstance(parsed, dict):
-            raise ValueError(f"Expected a JSON object, got {type(parsed).__name__}")
-
-        return parsed
+        return json.loads(text)
